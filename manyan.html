@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wildfire Simulation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #input-form {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            width: 90%;
+            max-width: 600px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+
+        #input-form label {
+            flex: 1 1 100%;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        #input-form input,
+        #input-form select {
+            flex: 1 1 45%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        #input-form button {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            flex: 1 1 100%;
+        }
+
+        #input-form button:hover {
+            background-color: #218838;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .map-container {
+            width: 100%;
+            height: calc(100vh - 150px);
+        }
+
+        .link-container {
+            width: 90%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+
+        .link-container a {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 16px;
+            transition: color 0.3s ease;
+        }
+
+        .link-container a:hover {
+            color: #0056b3;
+        }
+    </style>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=f09107cb34674ebf76e35d724e553434"></script>
+</head>
+<body>
+    <form id="input-form">
+        <label for="wind-speed">风速:</label>
+        <input type="number" id="wind-speed" name="windSpeed" value="5" min="0" max="50" step="1">
+        <label for="wind-direction">风向:</label>
+        <select id="wind-direction" name="windDirection">
+            <option value="N">北</option>
+            <option value="S">南</option>
+            <option value="E">东</option>
+            <option value="W">西</option>
+            <option value="NE">东北</option>
+            <option value="NW">西北</option>
+            <option value="SE">东南</option>
+            <option value="SW">西南</option>
+        </select>
+        <label for="humidity">湿度:</label>
+        <input type="number" id="humidity" name="humidity" value="20" min="0" max="100" step="1">
+        <label for="fire-count">火点数量:</label>
+        <input type="number" id="fire-count" name="fireCount" value="5" min="1" max="100" step="1">
+        <button type="button" id="start-simulation">开始模拟</button>
+    </form>
+    
+    <div class="map-container">
+        <div id="map"></div>
+    </div>
+    <script>
+        let map;
+
+        document.getElementById('start-simulation').addEventListener('click', () => {
+            const windSpeed = document.getElementById('wind-speed').value;
+            const windDirection = document.getElementById('wind-direction').value;
+            const humidity = document.getElementById('humidity').value;
+            const fireCount = parseInt(document.getElementById('fire-count').value);
+
+            const terrain = generateTerrain(100, 100); // 生成100x100的地形
+            const vegetation = generateVegetation(100, 100); // 生成100x100的植被
+            const firePoints = generateFirePoints(fireCount); // 在指定区域内生成指定数量的火点
+
+            const data = {
+                weather: {
+                    windSpeed: parseInt(windSpeed),
+                    windDirection: windDirection,
+                    humidity: parseInt(humidity)
+                },
+                terrain: terrain,
+                vegetation: vegetation,
+                firePoints: firePoints
+            };
+
+            initializeSimulation(data);
+        });
+
+        function generateTerrain(rows, cols) {
+            const terrain = [];
+            for (let i = 0; i < rows; i++) {
+                const row = [];
+                for (let j = 0; j < cols; j++) {
+                    row.push(Math.random());
+                }
+                terrain.push(row);
+            }
+            return terrain;
+        }
+
+        function generateVegetation(rows, cols) {
+            const vegetation = [];
+            for (let i = 0; i < rows; i++) {
+                const row = [];
+                for (let j = 0; j < cols; j++) {
+                    row.push(Math.random());
+                }
+                vegetation.push(row);
+            }
+            return vegetation;
+        }
+
+        function generateFirePoints(count) {
+            const firePoints = [];
+            const centerX = 29.82286; // 中心纬度
+            const centerY = 106.379729; // 中心经度
+
+            for (let i = 0; i < count; i++) {
+                const xOffset = (Math.random() - 0.5) * 0.01; // 生成较小的随机偏移，增加密度
+                const yOffset = (Math.random() - 0.5) * 0.01;
+                firePoints.push({
+                    x: centerX + xOffset,
+                    y: centerY + yOffset
+                });
+            }
+            return firePoints;
+        }
+
+        function initializeSimulation(data) {
+            const { weather, terrain, vegetation, firePoints } = data;
+
+            const rows = terrain.length;
+            const cols = terrain[0].length;
+            const grid = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+            firePoints.forEach(point => {
+                const row = Math.floor((point.x - 29.82286) * 5000); // 转换为网格坐标
+                const col = Math.floor((point.y - 106.379729) * 5000);
+                if (row >= 0 && row < rows && col >= 0 && col < cols) {
+                    grid[row][col] = 1;
+                }
+            });
+
+            function updateGrid() {
+                const newGrid = grid.map(arr => arr.slice());
+
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                        if (grid[i][j] === 1) {
+                            newGrid[i][j] = 2;
+
+                            const windEffect = getWindEffect(weather.windDirection, weather.windSpeed);
+                            spreadFire(i, j, windEffect, terrain, vegetation, newGrid);
+                        }
+                    }
+                }
+
+                grid.forEach((row, i) => row.forEach((cell, j) => grid[i][j] = newGrid[i][j]));
+            }
+
+            function getWindEffect(direction, speed) {
+                const effect = { dx: 0, dy: 0 };
+                const diagSpeed = speed / Math.sqrt(2);
+                switch (direction) {
+                    case 'N': effect.dy = -speed; break;
+                    case 'S': effect.dy = speed; break;
+                    case 'E': effect.dx = speed; break;
+                    case 'W': effect.dx = -speed; break;
+                    case 'NE': effect.dx = diagSpeed; effect.dy = -diagSpeed; break;
+                    case 'NW': effect.dx = -diagSpeed; effect.dy = -diagSpeed; break;
+                    case 'SE': effect.dx = diagSpeed; effect.dy = diagSpeed; break;
+                    case 'SW': effect.dx = -diagSpeed; effect.dy = diagSpeed; break;
+                }
+                return effect;
+            }
+
+            function spreadFire(x, y, windEffect, terrain, vegetation, newGrid) {
+                const directions = [
+                    { dx: 1, dy: 0 },
+                    { dx: -1, dy: 0 },
+                    { dx: 0, dy: 1 },
+                    { dx: 0, dy: -1 }
+                ];
+
+                directions.forEach(({ dx, dy }) => {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < terrain.length && ny >= 0 && ny < terrain[0].length) {
+                        const terrainFactor = 1 /                         (terrain[nx][ny] + 1);
+                        const vegetationFactor = 1 / (vegetation[nx][ny] + 1);
+                        const windFactor = 1 + windEffect.dx * dx + windEffect.dy * dy;
+
+                        const spreadProbability = 0.6 * terrainFactor * vegetationFactor * windFactor; // 增加蔓延概率
+                        if (grid[nx][ny] === 0 && Math.random() < spreadProbability) {
+                            newGrid[nx][ny] = 1;
+                        }
+                    }
+                });
+            }
+
+            function renderGrid() {
+                map.clearMap();
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                        const latLng = new AMap.LngLat(j / 5000 + 106.379729, i / 5000 + 29.82286);
+                        let fillColor;
+                        if (grid[i][j] === 1) {
+                            fillColor = 'red';
+                        } else if (grid[i][j] === 2) {
+                            fillColor = 'black';
+                        }
+                        if (fillColor) {
+                            const circle = new AMap.Circle({
+                                center: latLng,
+                                radius: 2, // 调整火点大小为2
+                                strokeColor: fillColor,
+                                strokeWeight: 2,
+                                strokeOpacity: 0.8,
+                                fillColor: fillColor,
+                                fillOpacity: 0.35
+                            });
+                            map.add(circle);
+                        }
+                    }
+                }
+            }
+
+            function simulate() {
+                updateGrid();
+                renderGrid();
+                setTimeout(simulate, 1000); // 使用 setTimeout 控制模拟的步长为1000ms，即1秒
+            }
+
+            simulate();
+        }
+
+        // 创建地图实例
+        map = new AMap.Map('map', {
+            center: [106.379729, 29.82286],
+            zoom: 16
+        });
+
+        // 添加地形图层
+        const terrainLayer = new AMap.TileLayer.Satellite();
+        map.add(terrainLayer);
+    </script>
+</body>
+</html>
+
